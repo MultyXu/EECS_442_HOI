@@ -35,39 +35,44 @@ def extract_human_object(image):
     input: image
     output: 
     cropped_human, cropped_object (list of cropped image of human and object)
-    object_label (list of object id/name)
+    id_obejects (list of object id/name)
     '''
+    # Initialize output values:
     cropped_human = []
     cropped_objects = []
-    label_objects = []
+    id_objects = []
     
+    # Load Yolo model & Object detection
     model = YOLO('yolov8n.pt')
-
     results = model(image)
 
+    # Bounding boxes of detected objects
     boxes = results[0].boxes.xyxy.tolist()
+
+    # Class IDs of detected objects
     class_ids = results[0].boxes.cls.tolist()
 
+    # The names of classes that the YOLO model can detect
     class_names = model.names
 
-    original_size = image.size
-
-    to_tensor = TOTensor()
+    to_tensor = ToTensor()
 
     for i, (box, class_id) in enumerate(zip(boxes, class_ids)):
+        # Bounding box & label for each object
         x1, y1, x2, y2 = map(int, box)
         label = class_names[class_id]
 
+        # A black image of the same size as the input image
         canvas = torch.zeros_like(to_tensor(image))
-        
         selected = to_tensor(image)[:, y1:y2, x1:x2]
         canvas[:, y1:y2, x1:x2] = selected
-      
+
+        # Add to return value
         if label.lower() == 'person':
             cropped_human.append(canvas)
         else:
             cropped_objects.append(canvas)
-            label_objects.append(class_id)
+            id_objects.append(class_id)
 
     return cropped_human, cropped_objects, label_objects
 
