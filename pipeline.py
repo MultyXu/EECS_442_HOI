@@ -32,7 +32,7 @@ from torchvision.transforms.functional import to_tensor
 
 def extract_human_object(image):
     '''
-    input: image
+    input: image (a torch tensor)
     output: 
     cropped_human, cropped_object (list of cropped image of human and object)
     object_label (list of object id/name)
@@ -195,7 +195,7 @@ def train_model(model, dataloaders, criterion, optimizer, save_dir = None, num_e
 
     return model, tr_acc_history, val_acc_history
 
-if __name__=='__main__':
+def main():
     print("Excuting")
     
     input_size = 4096 #depends on the feature it will be fed into
