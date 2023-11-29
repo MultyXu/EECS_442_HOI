@@ -42,19 +42,19 @@ def extract_human_object(image):
     cropped_objects = []
     id_objects = []
     
-    # Load Yolo model & Object detection
-    model = YOLO('yolov8n.pt')
+    # The names of classes that the YOLO model can detect
+    class_names = model.names
+    
+    # Load Yolo model for object detection
+    model_objects = YOLO('yolov8n.pt')
     results = model(image)
 
     # Bounding boxes of detected objects
     boxes = results[0].boxes.xyxy.tolist()
-
     # Class IDs of detected objects
     class_ids = results[0].boxes.cls.tolist()
 
-    # The names of classes that the YOLO model can detect
-    class_names = model.names
-
+    
     to_tensor = ToTensor()
 
     for i, (box, class_id) in enumerate(zip(boxes, class_ids)):
@@ -73,6 +73,7 @@ def extract_human_object(image):
         else:
             cropped_objects.append(canvas)
             id_objects.append(class_id)
+
 
     return cropped_human, cropped_objects, label_objects
 
