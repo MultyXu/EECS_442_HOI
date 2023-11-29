@@ -48,35 +48,59 @@ def extract_human_object(image):
 
     # Load Yolo model for object detection
     model_objects = YOLO('yolov8n.pt')
+<<<<<<< HEAD
     results = model_objects(yolo_img, conf=0.5)
+=======
+    model_human = YOLO('yolov8n-pose.pt')
+    
+    results_objects = model_objects(yolo_img)
+    results_hunan = model_human(yolo_img)
+>>>>>>> refs/remotes/origin/main
 
     # Bounding boxes of detected objects
-    boxes = results[0].boxes.xyxy.tolist()
+    boxes_objects = results_objects[0].boxes.xyxy.tolist()
+    boxes_human = results_hunan[0].boxes.xyxy.tolist()
+    
     # Class IDs of detected objects
-    class_ids = results[0].boxes.cls.tolist()
+    class_ids_objects = results_objects[0].boxes.cls.tolist()
+    class_ids_human = results_hunan[0].boxes.cls.tolist()
 
     # The names of classes that the YOLO model can detect
-    class_names = model_objects.names
+    class_names_objects = model_objects.names
+    class_names_human = model_human.names
 
     to_tensor = ToTensor()
 
-    for i, (box, class_id) in enumerate(zip(boxes, class_ids)):
+    for _, (box, class_id) in enumerate(zip(boxes_objects, class_ids_objects)):
         # Bounding box & label for each object
         x1, y1, x2, y2 = map(int, box)
-        label = class_names[class_id]
+        label = class_names_objects[class_id]
 
         # A black image of the same size as the input image
         canvas = torch.zeros_like(image)
         selected = image[:, y1:y2, x1:x2]
+        # Crop and reprint the selected image
         canvas[:, y1:y2, x1:x2] = selected
 
-        # Add to return value
-        if label.lower() == 'person':
-            cropped_human.append(canvas)
-        else:
+        # Add to return value - cropped_objects & id_objects
+        if label.lower() != 'person':
             cropped_objects.append(canvas)
             id_objects.append(class_id)
 
+    for _, (box, class_id) in enumerate(zip(boxes_human, class_ids_human)):
+        # Bouding box &label for each object
+        x1, y1, x2, y2 = map(int, box)
+        label = class_names_human[class_id]
+
+        # A black image of the same size as the input image
+        canvas = torch.zeros_like(image)
+        selected = image[:, y1:y2, x1:x2]
+        # Crop and reprint the selected image
+        canvas[:, y1:y2, x1:x2] = selected
+
+        # Add to return value - cropped_human
+        if label.lower() == 'person':
+            cropped_human.append(canvas)
 
     return cropped_human, cropped_objects, id_objects
 
