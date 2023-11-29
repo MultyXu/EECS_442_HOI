@@ -35,40 +35,45 @@ def extract_human_object(image):
     input: image (a torch tensor)
     output: 
     cropped_human, cropped_object (list of cropped image of human and object)
-    object_label (list of object id/name)
+    id_obejects (list of object id/name)
     '''
+    # Initialize output values:
     cropped_human = []
     cropped_objects = []
-    label_objects = []
+    id_objects = []
     
-    model = YOLO('yolov8n.pt')
-
+    # The names of classes that the YOLO model can detect
+    class_names = model.names
+    
+    # Load Yolo model for object detection
+    model_objects = YOLO('yolov8n.pt')
     results = model(image)
 
+    # Bounding boxes of detected objects
     boxes = results[0].boxes.xyxy.tolist()
+    # Class IDs of detected objects
     class_ids = results[0].boxes.cls.tolist()
 
-    class_names = model.names
-
-    original_size = image.size
+    
+    to_tensor = ToTensor()
 
     for i, (box, class_id) in enumerate(zip(boxes, class_ids)):
+        # Bounding box & label for each object
         x1, y1, x2, y2 = map(int, box)
-        label = class_names[class_id]  # Get the label (class name)
+        label = class_names[class_id]
 
-        cropped_pil_image = image.crop((x1, y1, x2, y2))
+        # A black image of the same size as the input image
+        canvas = torch.zeros_like(to_tensor(image))
+        selected = to_tensor(image)[:, y1:y2, x1:x2]
+        canvas[:, y1:y2, x1:x2] = selected
 
-        black_image = Image.new("RGB", original_size, (0, 0, 0))
-
-        black_image.paste(cropped_pil_image, (x1, y1))
-      
-        cropped_tensor = to_tensor(black_image)
-
+        # Add to return value
         if label.lower() == 'person':
-            cropped_human.append(cropped_tensor)
+            cropped_human.append(canvas)
         else:
-            cropped_objects.append(cropped_tensor)
-            label_objects.append(class_id)
+            cropped_objects.append(canvas)
+            id_objects.append(class_id)
+
 
     return cropped_human, cropped_objects, label_objects
 
