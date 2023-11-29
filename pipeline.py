@@ -52,22 +52,21 @@ def extract_human_object(image):
 
     original_size = image.size
 
+    to_tensor = TOTensor()
+
     for i, (box, class_id) in enumerate(zip(boxes, class_ids)):
         x1, y1, x2, y2 = map(int, box)
-        label = class_names[class_id]  # Get the label (class name)
+        label = class_names[class_id]
 
-        cropped_pil_image = image.crop((x1, y1, x2, y2))
-
-        black_image = Image.new("RGB", original_size, (0, 0, 0))
-
-        black_image.paste(cropped_pil_image, (x1, y1))
+        canvas = torch.zeros_like(to_tensor(image))
+        
+        selected = to_tensor(image)[:, y1:y2, x1:x2]
+        canvas[:, y1:y2, x1:x2] = selected
       
-        cropped_tensor = to_tensor(black_image)
-
         if label.lower() == 'person':
-            cropped_human.append(cropped_tensor)
+            cropped_human.append(canvas)
         else:
-            cropped_objects.append(cropped_tensor)
+            cropped_objects.append(canvas)
             label_objects.append(class_id)
 
     return cropped_human, cropped_objects, label_objects
