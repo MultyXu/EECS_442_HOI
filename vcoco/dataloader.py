@@ -106,6 +106,7 @@ class V_COCO(Dataset):
                 # Image.open() is hard to convert to tensor, use imread instead
                 # see 445 project 2 for more detail
                 img = imread(vcoco_image_url)
+                print(vcoco['bbox'][[id],:])
                 # naive solution: pad every image to 640, 640
                 pad = np.zeros((640,640,3))
                 pad[:img.shape[0], :img.shape[1], :] = img

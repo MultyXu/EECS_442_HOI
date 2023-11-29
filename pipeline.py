@@ -27,12 +27,12 @@ import torchvision
 from torchvision import datasets, models, transforms
 import torch.nn as nn
 import torch.optim as optim
-from torchvision.transforms.functional import to_tensor
+from torchvision.transforms import ToTensor
 
 
 def extract_human_object(image):
     '''
-    input: image (a torch tensor)
+    input: image (a torch tensor, 3x640x640, 0~255)
     output: 
     cropped_human, cropped_object (list of cropped image of human and object)
     id_obejects (list of object id/name)
@@ -41,20 +41,23 @@ def extract_human_object(image):
     cropped_human = []
     cropped_objects = []
     id_objects = []
-    
-    # The names of classes that the YOLO model can detect
-    class_names = model.names
+
+    # change image_tensor size to be yolo fit
+    yolo_img = image.reshape(1, image.shape[0], image.shape[1], image.shape[2])
+    print("image_shape", image.shape)
     
     # Load Yolo model for object detection
     model_objects = YOLO('yolov8n.pt')
-    results = model(image)
+    results = model_objects(yolo_img)
 
     # Bounding boxes of detected objects
     boxes = results[0].boxes.xyxy.tolist()
     # Class IDs of detected objects
     class_ids = results[0].boxes.cls.tolist()
 
-    
+    # The names of classes that the YOLO model can detect
+    class_names = model_objects.names
+
     to_tensor = ToTensor()
 
     for i, (box, class_id) in enumerate(zip(boxes, class_ids)):
@@ -63,8 +66,8 @@ def extract_human_object(image):
         label = class_names[class_id]
 
         # A black image of the same size as the input image
-        canvas = torch.zeros_like(to_tensor(image))
-        selected = to_tensor(image)[:, y1:y2, x1:x2]
+        canvas = torch.zeros_like(image)
+        selected = image[:, y1:y2, x1:x2]
         canvas[:, y1:y2, x1:x2] = selected
 
         # Add to return value
@@ -75,7 +78,7 @@ def extract_human_object(image):
             id_objects.append(class_id)
 
 
-    return cropped_human, cropped_objects, label_objects
+    return cropped_human, cropped_objects, id_objects
 
 def extract_feature(cropped_image):
     '''
