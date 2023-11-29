@@ -45,10 +45,10 @@ def extract_human_object(image):
     # change image_tensor size to be yolo fit
     yolo_img = image.reshape(1, image.shape[0], image.shape[1], image.shape[2])
     print("image_shape", image.shape)
-    
+
     # Load Yolo model for object detection
     model_objects = YOLO('yolov8n.pt')
-    results = model_objects(yolo_img)
+    results = model_objects(yolo_img, conf=0.5)
 
     # Bounding boxes of detected objects
     boxes = results[0].boxes.xyxy.tolist()
