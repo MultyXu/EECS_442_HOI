@@ -1,17 +1,17 @@
 from torchvision.models import resnet50, ResNet50_Weights
 from torchvision.models.feature_extraction import create_feature_extractor
-
+import torch
 
 class Feature_extractor():
-    def __init__(self):
+    def __init__(self, device='cpu'):
         # Step 1: Initialize model with the best available weights
         # weights = ResNet50_Weights.DEFAULT
-        weights = ResNet50_Weights.IMAGENET1K_V2
-        model = resnet50(weights=weights)
+        weights = ResNet50_Weights.IMAGENET1K_V2#.to(torch.device('cuda:0'))
+        model = resnet50(weights=weights).to(device)
         model.eval()
 
         # Step 2: Initialize the inference transforms
-        self.preprocess = self.weights.transforms()
+        self.preprocess = weights.transforms()
 
         # define the node you want to return
         return_nodes = {

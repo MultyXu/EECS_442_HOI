@@ -28,6 +28,7 @@ class MLP_POI(nn.Module):
             self._initialize_weights()
 
     def forward(self, x):
+        x = torch.flatten(x,1)
         x = self.classifier(x)
         return x
 

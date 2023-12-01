@@ -9,8 +9,8 @@ from torch.utils.data import Dataset, DataLoader
 import __init__
 # import vsrl_utils as vu
 # from coco.PythonAPI.pycocotools import coco
-import vsrl_utils as vu
-from coco.PythonAPI.pycocotools import coco
+import vcoco.vsrl_utils as vu
+from vcoco.coco.PythonAPI.pycocotools import coco
 from PIL import Image
 import requests
 
@@ -22,14 +22,14 @@ def get_train_val_test_loaders(batch_size):
 
     Any keyword arguments are forwarded to the LandmarksDataset constructor.
     """
-    va = get_train_val_test_datasets()
+    tr, te = get_train_val_test_datasets()
 
     #tr, va, te, _ = get_train_val_test_datasets()
 
-    ##tr_loader = DataLoader(tr, batch_size=batch_size, shuffle=True)
-    va_loader = DataLoader(va, batch_size=batch_size, shuffle=False)
-    # te_loader = DataLoader(te, batch_size=batch_size, shuffle=False)
-    return va_loader
+    tr_loader = DataLoader(tr, batch_size=batch_size, shuffle=False)
+    # va_loader = DataLoader(va, batch_size=batch_size, shuffle=False)
+    te_loader = DataLoader(te, batch_size=batch_size, shuffle=False)
+    return tr_loader, te_loader
     #return tr_loader, va_loader, te_loader
 
 def get_train_val_test_datasets():
@@ -37,30 +37,33 @@ def get_train_val_test_datasets():
 
     Image standardizer should be fit to train data and applied to all splits.
     """
-    tr = V_COCO("train")
+    tr = V_COCO("test", 0, 300)
     # va = V_COCO("val")
-    # te = V_COCO("test")
+    te = V_COCO("test", 300, 330)
 
     # return tr, va, te
-    return tr
+    return tr, te
 
 class V_COCO(Dataset):
     """Dataset class for landmark images."""
 
-    def __init__(self, partition="train"):    
+    def __init__(self, partition="train", start=0, end=100):    
         
         super().__init__()
         
+        self.partition = partition
         self._load_cocos(partition)
+        self.start = start
+        self.end = end
         self.X, self.y = self._load_data()
 
     def __len__(self):
         """Return size of dataset."""
         return len(self.X)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx, include_object=False):
         """Return (image, label) pair at index `idx` of dataset."""
-        return torch.from_numpy(self.X[idx]).float(), torch.tensor(self.y[idx]).long()
+        return (torch.from_numpy(self.X[idx]).permute(2,0,1) / 255), torch.tensor(self.y[idx]/640).float()
         # return self.X[idx], self.y[idx]
 
     def _load_cocos(self, set_name):
@@ -79,6 +82,7 @@ class V_COCO(Dataset):
 
         for i in range(5):
             if i != 0:
+              # only load hold action
               break
             # for each action
             action_name = self.vcoco_all[i]['action_name']
@@ -92,10 +96,17 @@ class V_COCO(Dataset):
             
             # for i in tqdm(range(len(positive_index))):
             # for i in tqdm(range(100)): #just load first 100 images
-            load_num = 100
-            if len(positive_index) < load_num:
-              load_num = len(positive_index)
-            for j in tqdm(range(load_num)): #just load first 100 images
+
+            # load_num = 100
+            print('total', self.partition, 'image number', len(positive_index))
+
+            # if len(positive_index) < load_num:
+            #   load_num = len(positive_index)
+            # for j in tqdm(range(load_num)): #just load first 100 images
+
+            self.end = min(self.end, len(positive_index))
+            print('load image from ', self.start, 'to', self.end)
+            for j in tqdm(range(self.start, self.end)):
                 id = positive_index[j]
                 #X:
 
@@ -109,17 +120,13 @@ class V_COCO(Dataset):
                 # see 445 project 2 for more detail
                 img = imread(vcoco_image_url)
                 # naive solution: pad every image to 640, 640
-                bbox = vcoco['bbox'][[id],:][0]
-                X,Y,W,H = bbox
-                cropped_image = img[int(Y):int(Y+H), int(X):int(X+W)]
-                # print([X,Y,W,H])
-                plt.imshow(cropped_image)
-                # cv2.imwrite('contour1.png', cropped_image)
-                background = np.zeros((img.shape[0], img.shape[1], 3))
-                background[int(X):cropped_image.shape[0], int(Y):cropped_image.shape[1], :] = cropped_image
 
                 pad = np.zeros((640,640,3))
-                pad[:background.shape[0], :background.shape[1], :] = background
+                pad[:img.shape[0], :img.shape[1], :] = img
+                
+                sy = 4.; sx = float(pad.shape[1])/float(pad.shape[0])*sy;
+                # fig, ax = subplot(plt, 1,1, sy,sx); ax.set_axis_off();
+                # ax.imshow(pad);
 
                 X.append(pad)
 
@@ -131,13 +138,7 @@ class V_COCO(Dataset):
                 # get role_box, 
                 role_bbox = vcoco['role_bbox'][id,:]*1.
                 role_bbox = role_bbox.reshape((-1,4))
-                # if the second bbox (instrument or object) is not nan
-                # for k in range(1, len(role_bbox)):
-                #   index = len(role_bbox) - 1 - k
-                #   if not np.isnan(role_bbox[index,0]):
-                #       # bbox is actually "xyxy" format
-                #       x_cord = (role_bbox[index,0] + role_bbox[index,2]) / 2
-                #       y_cord = (role_bbox[index,1] + role_bbox[index,3]) / 2
+
                 if len(role_bbox) > 2:
                   if not np.isnan(role_bbox[2,0]):
                       # bbox is actually "xyxy" format
@@ -150,17 +151,6 @@ class V_COCO(Dataset):
                       x_cord = (role_bbox[1,0] + role_bbox[1,2]) / 2
                       y_cord = (role_bbox[1,1] + role_bbox[1,3]) / 2
                   
-                # if len(role_object_id) > 1:
-                #     obj_ann_id = role_object_id[1]
-                #     obj_bbox = self.coco.loadAnns(obj_ann_id)[0]["bbox"] # role_bbox = vcoco['role_bbox'][id,:]*1.
-                #     x_cord = obj_bbox[0] + obj_bbox[2] / 2
-                #     y_cord = obj_bbox[1] + obj_bbox[3] / 2
                     
                 y.append((x_cord, y_cord))
         return np.array(X), np.array(y)
-
-# if __name__ == "__main__":
-
-#     # tr, va, te = get_train_val_test_datasets(64)
-#     va = get_train_val_test_loaders(64)
-#     print("Val:\t", len(va.X))

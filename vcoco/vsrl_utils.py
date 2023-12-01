@@ -42,8 +42,8 @@ def load_vcoco(imset, dir_name=None):
     vsrl_data = json.load(f)
   # in python 3, json do not need to be converted
   # vsrl_data = unicode_to_str(vsrl_data) 
-  print(type(vsrl_data))
-  print(vsrl_data[0]['role_object_id'])
+  # print(type(vsrl_data))
+  # print(vsrl_data[0]['role_object_id'])
   for i in range(len(vsrl_data)):
     # print(vsrl_data[i])
     vsrl_data[i]['role_object_id'] = \

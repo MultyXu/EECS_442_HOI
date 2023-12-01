@@ -22,14 +22,14 @@ def get_train_val_test_loaders(batch_size):
 
     Any keyword arguments are forwarded to the LandmarksDataset constructor.
     """
-    va = get_train_val_test_datasets()
+    tr, te = get_train_val_test_datasets()
 
     #tr, va, te, _ = get_train_val_test_datasets()
 
-    ##tr_loader = DataLoader(tr, batch_size=batch_size, shuffle=True)
-    va_loader = DataLoader(va, batch_size=batch_size, shuffle=False)
-    # te_loader = DataLoader(te, batch_size=batch_size, shuffle=False)
-    return va_loader
+    tr_loader = DataLoader(tr, batch_size=batch_size, shuffle=False)
+    # va_loader = DataLoader(va, batch_size=batch_size, shuffle=False)
+    te_loader = DataLoader(te, batch_size=batch_size, shuffle=False)
+    return tr_loader, te_loader
     #return tr_loader, va_loader, te_loader
 
 def get_train_val_test_datasets():
@@ -37,30 +37,33 @@ def get_train_val_test_datasets():
 
     Image standardizer should be fit to train data and applied to all splits.
     """
-    tr = V_COCO("train")
+    tr = V_COCO("test", 0, 100)
     # va = V_COCO("val")
-    # te = V_COCO("test")
+    te = V_COCO("test", 100, 120)
 
     # return tr, va, te
-    return tr
+    return tr, te
 
 class V_COCO(Dataset):
     """Dataset class for landmark images."""
 
-    def __init__(self, partition="train"):    
+    def __init__(self, partition="train", start=0, end=100):    
         
         super().__init__()
         
+        self.partition = partition
         self._load_cocos(partition)
+        self.start = start
+        self.end = end
         self.X, self.y = self._load_data()
 
     def __len__(self):
         """Return size of dataset."""
         return len(self.X)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx, include_object=False):
         """Return (image, label) pair at index `idx` of dataset."""
-        return torch.from_numpy(self.X[idx]).float(), torch.tensor(self.y[idx]).long()
+        return (torch.from_numpy(self.X[idx]).permute(2,0,1) / 255), torch.tensor(self.y[idx]/640).float()
         # return self.X[idx], self.y[idx]
 
     def _load_cocos(self, set_name):
@@ -77,9 +80,10 @@ class V_COCO(Dataset):
         X, y = [], []
         classes = [x['action_name'] for x in self.vcoco_all]
 
-        for i in range(len(self.vcoco_all)):
+        for i in range(5):
             if i != 0:
-              break;
+              # only load hold action
+              break
             # for each action
             action_name = self.vcoco_all[i]['action_name']
             print("load " + action_name, i+1, "/", len(self.vcoco_all))
@@ -92,12 +96,21 @@ class V_COCO(Dataset):
             
             # for i in tqdm(range(len(positive_index))):
             # for i in tqdm(range(100)): #just load first 100 images
-            load_num = 100
-            if len(positive_index) < load_num:
-              load_num = len(positive_index)
-            for j in tqdm(range(load_num)): #just load first 100 images
+
+            # load_num = 100
+            print('total', self.partition, 'image number', len(positive_index))
+
+            # if len(positive_index) < load_num:
+            #   load_num = len(positive_index)
+            # for j in tqdm(range(load_num)): #just load first 100 images
+
+            self.end = min(self.end, len(positive_index))
+            print('load image from ', self.start, 'to', self.end)
+            for j in tqdm(range(self.start, self.end)):
                 id = positive_index[j]
                 #X:
+
+                
                 vcoco_image = self.coco.loadImgs(ids=[vcoco['image_id'][id][0]])[0]
                 # print(vcoco_image)
                 vcoco_image_url = vcoco_image['coco_url']
@@ -106,10 +119,28 @@ class V_COCO(Dataset):
                 # Image.open() is hard to convert to tensor, use imread instead
                 # see 445 project 2 for more detail
                 img = imread(vcoco_image_url)
-                print(vcoco['bbox'][[id],:])
                 # naive solution: pad every image to 640, 640
+                bbox = vcoco['bbox'][[id],:][0]
+                X1,Y1,X2,Y2 = bbox
+                # print(X1,Y1,X2,Y2)
+                cropped_image = img[int(Y1):int(Y2), int(X1):int(X2)]
+                # print([X,Y,W,H])
+                # plt.imshow(cropped_image)
+                # print('img: ', img.shape)
+                # print('cropped: ', cropped_image.shape)
+                #cropped: (356, 313, 3)
+                #img: (427, 640, 3)
+                #background = np.zeros((img.shape[0], img.shape[1], 3))
+                
+                background = np.zeros_like(img)
+                background[int(Y1):int(Y2), int(X1):int(X2)] = cropped_image
+
                 pad = np.zeros((640,640,3))
-                pad[:img.shape[0], :img.shape[1], :] = img
+                pad[:background.shape[0], :background.shape[1], :] = background
+                
+                sy = 4.; sx = float(pad.shape[1])/float(pad.shape[0])*sy;
+                # fig, ax = subplot(plt, 1,1, sy,sx); ax.set_axis_off();
+                # ax.imshow(pad);
 
                 X.append(pad)
 
@@ -121,13 +152,7 @@ class V_COCO(Dataset):
                 # get role_box, 
                 role_bbox = vcoco['role_bbox'][id,:]*1.
                 role_bbox = role_bbox.reshape((-1,4))
-                # if the second bbox (instrument or object) is not nan
-                # for k in range(1, len(role_bbox)):
-                #   index = len(role_bbox) - 1 - k
-                #   if not np.isnan(role_bbox[index,0]):
-                #       # bbox is actually "xyxy" format
-                #       x_cord = (role_bbox[index,0] + role_bbox[index,2]) / 2
-                #       y_cord = (role_bbox[index,1] + role_bbox[index,3]) / 2
+
                 if len(role_bbox) > 2:
                   if not np.isnan(role_bbox[2,0]):
                       # bbox is actually "xyxy" format
@@ -140,17 +165,138 @@ class V_COCO(Dataset):
                       x_cord = (role_bbox[1,0] + role_bbox[1,2]) / 2
                       y_cord = (role_bbox[1,1] + role_bbox[1,3]) / 2
                   
-                # if len(role_object_id) > 1:
-                #     obj_ann_id = role_object_id[1]
-                #     obj_bbox = self.coco.loadAnns(obj_ann_id)[0]["bbox"] # role_bbox = vcoco['role_bbox'][id,:]*1.
-                #     x_cord = obj_bbox[0] + obj_bbox[2] / 2
-                #     y_cord = obj_bbox[1] + obj_bbox[3] / 2
                     
                 y.append((x_cord, y_cord))
         return np.array(X), np.array(y)
 
-# if __name__ == "__main__":
 
-#     # tr, va, te = get_train_val_test_datasets(64)
-#     va = get_train_val_test_loaders(64)
-#     print("Val:\t", len(va.X))
+def get_train_val_test_loaders_binary(batch_size):
+    """Return DataLoaders for train, val and test splits.
+
+    Any keyword arguments are forwarded to the LandmarksDataset constructor.
+    """
+    tr, te = get_train_val_test_datasets_binary()
+
+    #tr, va, te, _ = get_train_val_test_datasets()
+
+    tr_loader = DataLoader(tr, batch_size=batch_size, shuffle=False)
+    # va_loader = DataLoader(va, batch_size=batch_size, shuffle=False)
+    te_loader = DataLoader(te, batch_size=batch_size, shuffle=False)
+    return tr_loader, te_loader
+    #return tr_loader, va_loader, te_loader
+
+def get_train_val_test_datasets_binary():
+    """Return LandmarksDatasets and image standardizer.
+4
+    Image standardizer should be fit to train data and applied to all splits.
+    """
+    tr = V_COCO_binary("train", 0, 100)
+    # va = V_COCO("val")
+    te = V_COCO_binary("train", 100, 120)
+
+    # return tr, va, te
+    return tr, te
+
+
+class V_COCO_binary(Dataset):
+    """Dataset class for landmark images."""
+
+    def __init__(self, partition="train", start=0, end=100):    
+        
+        super().__init__()
+        
+        self.partition = partition
+        self._load_cocos(partition)
+        self.start = start
+        self.end = end
+        self.X, self.y = self._load_data()
+
+    def __len__(self):
+        """Return size of dataset."""
+        return len(self.X)
+
+    def __getitem__(self, idx, include_object=False):
+        """Return (image, label) pair at index `idx` of dataset."""
+        return (torch.from_numpy(self.X[idx]).permute(2,0,1) / 255), torch.tensor(self.y[idx]).float()
+        # return self.X[idx], self.y[idx]
+
+    def _load_cocos(self, set_name):
+        
+        # Load COCO annotations for V-COCO images
+        self.coco = vu.load_coco()
+
+        # Load the VCOCO annotations for vcoco_train image set
+        self.vcoco_all = vu.load_vcoco('vcoco_' + set_name)
+        for x in self.vcoco_all:
+            x = vu.attach_gt_boxes(x, self.coco)
+            
+    def _load_data(self):
+        X, y = [], []
+        classes = [x['action_name'] for x in self.vcoco_all]
+
+        for i in range(len(classes)):
+          # for each action
+            if i != 0:
+              # only load hold action
+              break
+            
+
+            action_name = self.vcoco_all[i]['action_name']
+            print("load " + action_name, i+1, "/", len(self.vcoco_all))
+            cls_id = classes.index(action_name)
+            vcoco = self.vcoco_all[cls_id]
+
+            positive_index = np.where(vcoco['label'] == 1)[0]
+
+            # load_num = 100
+            print('total', self.partition, 'image number', len(positive_index))
+
+            self.end = min(self.end, len(positive_index))
+            print('load image from ', self.start, 'to', self.end)
+
+            for j in tqdm(range(self.start, self.end)):
+                id = positive_index[j]
+
+                vcoco_image = self.coco.loadImgs(ids=[vcoco['image_id'][id][0]])[0]
+                # print(vcoco_image)
+                vcoco_image_url = vcoco_image['coco_url']
+
+                img = imread(vcoco_image_url)
+                # naive solution: pad every image to 640, 640
+
+                # crop human out of the image
+                bbox = vcoco['bbox'][[id],:][0]
+                X1,Y1,X2,Y2 = bbox
+                cropped_image = img[int(Y1):int(Y2), int(X1):int(X2)]
+    
+                # create empty image that has same size as original image
+                background = np.zeros_like(img)
+                background[int(Y1):int(Y2), int(X1):int(X2)] = cropped_image
+
+                # extend the image to 640*640
+                pad = np.zeros((640,640,3))
+                pad[:background.shape[0], :background.shape[1], :] = background
+                
+                
+
+                #y:
+                # first assume there is no interaction
+                label = [0,1]
+
+                # get role_box, 
+                role_bbox = vcoco['role_bbox'][id,:]*1.
+                role_bbox = role_bbox.reshape((-1,4))
+
+                if len(role_bbox) > 1:
+                  if not np.isnan(role_bbox[1,0]):
+                    # if has interaction
+                    x1, y1, x2, y2 = role_bbox[1,0], role_bbox[1,1], role_bbox[1,2], role_bbox[1,3]
+                    object_img = img[int(y1):int(y2), int(x1):int(x2)]
+                    pad[int(Y1):int(Y2), int(X1):int(X2)] = object_img
+                    label = [1,0]
+                
+                X.append(pad)
+                y.append(label)
+
+
+        return np.array(X), np.array(y)

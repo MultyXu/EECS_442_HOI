@@ -29,7 +29,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision.transforms import ToTensor
 
-
 def extract_human_object(image):
     '''
     input: image (a torch tensor, 3x640x640, 0~255)
@@ -40,22 +39,20 @@ def extract_human_object(image):
     # Initialize output values:
     cropped_human = []
     cropped_objects = []
+    human_box = []
+    object_box = []
     id_objects = []
 
     # change image_tensor size to be yolo fit
     yolo_img = image.reshape(1, image.shape[0], image.shape[1], image.shape[2])
     print("image_shape", image.shape)
-
+    
     # Load Yolo model for object detection
     model_objects = YOLO('yolov8n.pt')
-<<<<<<< HEAD
-    results = model_objects(yolo_img, conf=0.5)
-=======
     model_human = YOLO('yolov8n-pose.pt')
     
     results_objects = model_objects(yolo_img)
     results_hunan = model_human(yolo_img)
->>>>>>> refs/remotes/origin/main
 
     # Bounding boxes of detected objects
     boxes_objects = results_objects[0].boxes.xyxy.tolist()
@@ -86,6 +83,7 @@ def extract_human_object(image):
         if label.lower() != 'person':
             cropped_objects.append(canvas)
             id_objects.append(class_id)
+            object_box.append([x1, y1, x2, y2])
 
     for _, (box, class_id) in enumerate(zip(boxes_human, class_ids_human)):
         # Bouding box &label for each object
@@ -101,19 +99,45 @@ def extract_human_object(image):
         # Add to return value - cropped_human
         if label.lower() == 'person':
             cropped_human.append(canvas)
+            human_box.append([x1, y1, x2, y2])
 
-    return cropped_human, cropped_objects, id_objects
+    return cropped_human, cropped_objects, human_box, object_box, id_objects
 
-def extract_feature(cropped_image):
+def extract_feature(cropped_image, device='cpu'):
     '''
     input: a cropped image
     output: features (torch.tensor of image features)
     '''
-    feature_extractor = Feature_extractor()
+    feature_extractor = Feature_extractor(device)
     return feature_extractor.generate_feature(cropped_image)
 
 
-def train_model(model, dataloaders, criterion, optimizer, save_dir = None, num_epochs=25, model_name='MiniVGG'):
+def inference(image_tensor, mlp_model):
+  '''
+  input: 
+    image_tensor (3x640x640, 0~255)
+    mlp_model (traind mlp classifier)
+  output: 
+    list of point of interest (x,y)
+    list of human box (x,y,x,y)
+    list of object box (x,y,x,y)
+    list of id_objects (id)
+  '''
+  # store list of poi (point of interest) corresponding to each person 
+  poi = []
+
+  cropped_human, cropped_objects, human_box, object_box, id_objects = extract_human_object(image_tensor / 255)
+
+  for human in cropped_human:
+    feature = extract_feature(human)['layer4']
+    result_poi = mlp_model.forward(feature)
+    poi.append(result_poi)
+  
+  return result_poi, human_box, object_box, id_objects
+
+
+
+def train_model(model, dataloaders, criterion, optimizer, device='cpu', vis=False, save_dir = None, num_epochs=25, model_name='MLP_POI'):
     """
     Args:
         model: The NN to train
@@ -141,7 +165,7 @@ def train_model(model, dataloaders, criterion, optimizer, save_dir = None, num_e
         print('-' * 10)
 
         # Each epoch has a training and validation phase
-        for phase in ['train', 'val']:
+        for phase in ['train', 'test']:
             if phase == 'train':
                 model.train()  # Set model to training mode
             else:
@@ -179,9 +203,20 @@ def train_model(model, dataloaders, criterion, optimizer, save_dir = None, num_e
                 ###############################################################
 
                 optimizer.zero_grad() # zero the grad
-                outputs = model.forward(inputs)
-                preds = torch.argmax(outputs, dim=1)
-                loss = criterion(outputs, labels.data)
+
+                # extract the feature of cropped image to layer4 dimension
+                features = extract_feature(inputs, device)['layer4']
+
+                # predict the point of interest
+                outputs = model(features)
+
+                # compute loss
+                # preds = torch.argmax(outputs, dim=1)
+                loss = criterion(outputs, labels)
+
+                # print(inputs[0,0,0,0])
+                # print(type(loss))
+                # print(type(labels))
                 if phase == 'train':
                   loss.backward()
                   optimizer.step()
@@ -193,7 +228,12 @@ def train_model(model, dataloaders, criterion, optimizer, save_dir = None, num_e
 
                 # statistics
                 running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
+
+                # hard code correct constraint 
+                # if difference of l2 norm between GT poi and pred poi < 50
+                diff = torch.linalg.norm((outputs - labels)*640, ord=2, dim=1)
+                correct_pred = torch.where(diff < 50, 1, 0)
+                running_corrects += torch.count_nonzero(correct_pred)
 
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
             epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
@@ -201,9 +241,17 @@ def train_model(model, dataloaders, criterion, optimizer, save_dir = None, num_e
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
 
             # deep copy the model
-            if phase == 'val' and epoch_acc > best_acc:
+            if phase == 'test' and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 best_model_wts = copy.deepcopy(model.state_dict())
+
+                # visualize the prediction result 
+                if vis:
+                  for i in len(inputs):
+                    plt.figure()
+                    plt.imshow[inputs[i].permute(1,2,0)]
+                    plt.plot(labels[0][0], labels[0][1], marker='.', markersize=20)
+
 
                 # save the best model weights
                 # =========================================================== #
@@ -218,12 +266,12 @@ def train_model(model, dataloaders, criterion, optimizer, save_dir = None, num_e
                     torch.save(best_model_wts, os.path.join(save_dir, model_name + '.pth'))
 
             # record the train/val accuracies
-            if phase == 'val':
+            if phase == 'test':
                 val_acc_history.append(epoch_acc)
             else:
                 tr_acc_history.append(epoch_acc)
 
-    print('Best val Acc: {:4f}'.format(best_acc))
+    print('Best test Acc: {:4f}'.format(best_acc))
 
     return model, tr_acc_history, val_acc_history
 
