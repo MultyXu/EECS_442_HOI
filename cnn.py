@@ -60,7 +60,7 @@ class CNN(nn.Module):
   def forward(self, x):
     x = self.features(x)
     x = self.avgpool(x)
-    print(x.shape)
+    # print(x.shape)
     x = torch.flatten(x, 1)
     x = self.proposer(x)
     return x

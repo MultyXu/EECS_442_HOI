@@ -135,7 +135,7 @@ def attach_gt_boxes(vsrl_data, coco):
   vsrl_data['bbox'] = xyhw_to_xyxy(bbox)
   vsrl_data['role_bbox'] = \
     np.nan*np.zeros((vsrl_data['role_object_id'].shape[0], \
-      4*vsrl_data['role_object_id'].shape[1]), dtype=np.float)
+      4*vsrl_data['role_object_id'].shape[1]), dtype=float)
   
   # Get boxes for the role objects
   for i in range(vsrl_data['role_object_id'].shape[1]):

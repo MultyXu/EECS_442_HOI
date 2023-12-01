@@ -6,7 +6,7 @@ import torch
 from matplotlib import pyplot as plt
 from imageio.v3 import imread
 from torch.utils.data import Dataset, DataLoader
-import __init__
+import vcoco.__init__
 # import vsrl_utils as vu
 # from coco.PythonAPI.pycocotools import coco
 import vcoco.vsrl_utils as vu

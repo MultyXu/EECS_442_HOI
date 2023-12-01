@@ -6,7 +6,7 @@ import torch
 from matplotlib import pyplot as plt
 from imageio.v3 import imread
 from torch.utils.data import Dataset, DataLoader
-import __init__
+import vcoco.__init__
 # import vsrl_utils as vu
 # from coco.PythonAPI.pycocotools import coco
 import vcoco.vsrl_utils as vu
@@ -37,9 +37,9 @@ def get_train_val_test_datasets():
 
     Image standardizer should be fit to train data and applied to all splits.
     """
-    tr = V_COCO("test", 0, 300)
+    tr = V_COCO("test", 0, 100)
     # va = V_COCO("val")
-    te = V_COCO("test", 300, 330)
+    te = V_COCO("test", 100, 120)
 
     # return tr, va, te
     return tr, te
