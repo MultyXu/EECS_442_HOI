@@ -138,21 +138,6 @@ def inference(image_tensor, mlp_model):
 
 
 def train_model(model, dataloaders, criterion, optimizer, device='cpu', vis=False, save_dir = None, num_epochs=25, model_name='MLP_POI'):
-    """
-    Args:
-        model: The NN to train
-        dataloaders: A dictionary containing at least the keys
-                    'train','val' that maps to Pytorch data loaders for the dataset
-        criterion: The Loss function
-        optimizer: Pytroch optimizer. The algorithm to update weights
-        num_epochs: How many epochs to train for
-        save_dir: Where to save the best model weights that are found. Using None will not write anything to disk.
-
-    Returns:
-        model: The trained NN
-        tr_acc_history: list, training accuracy history. Recording freq: one epoch.
-        val_acc_history: list, validation accuracy history. Recording freq: one epoch.
-    """
 
     val_acc_history = []
     tr_acc_history = []
@@ -178,29 +163,8 @@ def train_model(model, dataloaders, criterion, optimizer, device='cpu', vis=Fals
             # Iterate over data.
             # TQDM has nice progress bars
             for inputs, labels in tqdm(dataloaders[phase]):
-                inputs = inputs.to(device)
-                labels = labels.to(device)
-
-                ###############################################################
-                # TODO:                                                       #
-                # Please read all the inputs carefully!                       #
-                # For "train" phase:                                          #
-                # (i)   Compute the outputs using the model                   #
-                #       Also, use the  outputs to calculate the class         #
-                #       predicted by the model,                               #
-                #       Store the predicted class in 'preds'                  #
-                #       (Think: argmax of outputs across a dimension)         #
-                #       torch.max() might help!                               #
-                # (ii)  Use criterion to store the loss in 'loss'             #
-                # (iii) Update the model parameters                           #
-                # Notes:                                                      #
-                # - Don't forget to zero the gradients before beginning the   #
-                # loop!                                                       #
-                # - "val" phase is the same as train, but without backprop    #
-                # - Compute the outputs (Same as "train", calculate 'preds'   #
-                # too),                                                       #
-                # - Calculate the loss and store it in 'loss'                 #
-                ###############################################################
+                inputs = inputs.to(device) * 255
+                labels = labels.to(device) * 640
 
                 optimizer.zero_grad() # zero the grad
 
@@ -231,7 +195,7 @@ def train_model(model, dataloaders, criterion, optimizer, device='cpu', vis=Fals
 
                 # hard code correct constraint 
                 # if difference of l2 norm between GT poi and pred poi < 50
-                diff = torch.linalg.norm((outputs - labels)*640, ord=2, dim=1)
+                diff = torch.linalg.norm((outputs - labels), ord=2, dim=1)
                 correct_pred = torch.where(diff < 50, 1, 0)
                 running_corrects += torch.count_nonzero(correct_pred)
 
